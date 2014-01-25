@@ -1,16 +1,37 @@
 import sys
-from time import sleep
+from time import sleep, time
 import binascii
 import glob
 import os.path
+def send(device, message):
+	device.write(message)
+	device.flush()
 class Cue:
 	def __init__(self, tm, msg):
-		self.time = tm
+		self.time = float(tm)
 		self.message = msg
+	def go(self, device, startTime):
+		send(device, self.message)
+		goTime = (time() * 1000 - startTime)
+		print 'cue gone at %i, %i milliseconds off' % (goTime / 1000, self.time - goTime)
 class Song:
 	def __init__(self, ttl, cs):
 		self.title = ttl
 		self.cues = cs
+	def play(self, device):
+		initCue = 0
+		if self.cues[0].time == 0:
+			initCue = 1
+		prompt = 'Ready to play ' + self.title + ', press enter to GO'
+		raw_input(prompt)
+		startTime = time() * 1000
+		for cue in self.cues:
+			cTime = cue.time
+			sleep(max(0, (1000 * cTime) - startTime + 10))
+			while (time() * 1000 - startTime) < cTime:
+				continue
+			cue.go(device, startTime)
+		print 'Done with cues for %s!' % title
 class Show:
 	title = ''
 	songs = []
@@ -38,7 +59,6 @@ class Show:
 			self.songs.append(Song(songTitle,currentCues))
 	def goto(self):
 		validInput = False
-		cueStack = 1
 		cue = -1
 		while not validInput:
 			ui = input("GOTO CUE: ")
@@ -50,19 +70,40 @@ class Show:
 		cueCode = binascii.hexlify(str(cue))
 		output = 'F07F01020101' + cueCode + '0031F7'
 		message = bytearray.fromhex(output)
-		self.midiOut.write(message)
+		send(self.midiOut, message)
 	def rehearse(self):
+		while True:
+			self.printSongs()
+			print 'Enter a number corrosponding to a song or anything else to exit'
+			selection = raw_input('> ')
+			if not(selection.isdigit() and int(selection) > 0 and int(selection) <= len(self.songs)):
+				print 'Exiting rehearsal...'
+				return 0
+			self.songs[int(selection) - 1].play(self.midiOut)
+	def show(self):
+		startI = 0
 		self.printSongs()
-		validInput = False
-		res = -1
-		while not validInput:
-			print 'Enter a number corrosponding to a song:'
+		print "Entering show mode.  Enter a valid index to start at an intermediate point, or nothing to start at the beginning"
+		selection = raw_input('> ')
+		if selection.isdigit() and int(selection) > 0 and int(selection) <= len(self.songs):
+			startI = int(selection) - 1
+		for song in self.songs[startI:]:
+			song.play(self.midiOut)
+	def loop(self):
+		while True:
+			print 'Please choose an option from below:'
+			print '1. GOTO CUE'
+			print '2. Rehearsal'
+			print '3. Show'
 			selection = input('> ')
-			if isinstance(selection, int) and selection > 0 and selection <= len(self.songs):
-				validInput = True
-				res = selection
-			else:
-				print 'Invalid Input'
+			if isinstance(selection, int) and selection > 0 and selection <= 3:
+				if selection == 1:
+					self.goto()
+				elif selection == 2:
+					self.rehearse()
+				elif selection == 3:
+					self.show()
+
 potentialDevices = glob.glob('/dev/midi*')
 if not len(potentialDevices):
 	print 'No MIDI devices have been detected'
@@ -91,4 +132,4 @@ if not os.path.isfile(sys.argv[1]):
 	print 'Input file does not exist'
 	sys.exit(1)
 show = Show(sys.argv[1], device)
-show.rehearse()
+show.loop()
