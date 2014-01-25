@@ -28,4 +28,4 @@ for line in open(sys.argv[1]):
 		sys.exit(1)
 	cueStackCode = binascii.hexlify(str(cueStack))
 	output = 'F0 7F ' + txChannel + ' 02 01 ' + opCode + ' ' + cueCode + ' 00 ' + cueStackCode + ' F7'
-	print '%i\t%s' % (milliseconds, output)
+	print '%i\t%s\t%s' % (milliseconds, output, splitLine[cueIndex])

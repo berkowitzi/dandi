@@ -3,41 +3,57 @@ from time import sleep, time
 import binascii
 import glob
 import os.path
+delimiter = '***************************************************'
+if len(sys.argv) < 2:
+	print 'Usage: python %s <CommandFile> [--noMusic]' % sys.argv[0]
+	sys.exit(1)
+if not os.path.isfile(sys.argv[1]):
+	print 'Input file does not exist'
+	sys.exit(1)
 def send(device, message):
 	device.write(message)
 	device.flush()
 class Cue:
-	def __init__(self, tm, msg):
+	def __init__(self, tm, msg, cn):
 		self.time = float(tm)
 		self.message = msg
+		self.description = cn
 	def go(self, device, startTime):
 		send(device, self.message)
 		goTime = (time() * 1000 - startTime)
-		print 'cue gone at %i, %i milliseconds off' % (goTime / 1000, self.time - goTime)
+		print 'cue %s at %is' % (self.description, goTime / 1000)
 class Song:
-	def __init__(self, ttl, cs):
+	def __init__(self, ttl, cs, ind):
 		self.title = ttl
 		self.cues = cs
+		self.index = ind
 	def play(self, device):
-		initCue = 0
-		if self.cues[0].time == 0:
-			initCue = 1
 		prompt = 'Ready to play ' + self.title + ', press enter to GO'
-		raw_input(prompt)
-		startTime = time() * 1000
-		for cue in self.cues:
-			cTime = cue.time
-			sleep(max(0, (1000 * cTime) - startTime + 10))
-			while (time() * 1000 - startTime) < cTime:
-				continue
-			cue.go(device, startTime)
-		print 'Done with cues for %s!' % title
+		try:
+			raw_input(prompt)
+			startTime = time() * 1000
+			for cue in self.cues:
+				cTime = cue.time
+				sleep(max(0, (1000 * cTime) - startTime + 10))
+				while (time() * 1000 - startTime) < cTime:
+					continue
+				cue.go(device, startTime)
+		except:
+			print 'Disconcinuing cue playback for %s...' % self.title
+			print delimiter
+			return
+		print 'Done with cues for %s!' % self.title
+		print delimiter
 class Show:
 	title = ''
 	songs = []
 	def printSongs(self):
+		print delimiter
+		print self.title
+		print delimiter
 		for ind, song in enumerate(self.songs):
 			print '(%i) %s' % (ind + 1, song.title)
+		print delimiter + '\n'
 	def __init__(self, filename, device):
 		self.midiOut = open(device, 'w')
 		self.title = filename.split('.')[0]
@@ -47,16 +63,18 @@ class Show:
 			line = line.rstrip()
 			if line.startswith('#'):
 				if currentCues:
-					self.songs.append(Song(songTitle,currentCues))
+					toAdd = Song(songTitle, currentCues, len(self.songs) + 1)
+					self.songs.append(toAdd)
 				songTitle = line[1:]
 				currentCues = []
 				continue
 			splitLine = line.split('\t')
 			time = int(splitLine[0])
 			message = bytearray.fromhex(splitLine[1])
-			currentCues.append(Cue(time,message))
+			description = splitLine[2]
+			currentCues.append(Cue(time,message, description))
 		if currentCues:
-			self.songs.append(Song(songTitle,currentCues))
+			self.songs.append(Song(songTitle,currentCues, len(self.songs) + 1))
 	def goto(self):
 		validInput = False
 		cue = -1
@@ -91,18 +109,20 @@ class Show:
 			song.play(self.midiOut)
 	def loop(self):
 		while True:
-			print 'Please choose an option from below:'
+			print 'Please choose an option from below:\n'
 			print '1. GOTO CUE'
 			print '2. Rehearsal'
-			print '3. Show'
-			selection = input('> ')
-			if isinstance(selection, int) and selection > 0 and selection <= 3:
+			print '3. Show\n'
+			selection = raw_input('> ')
+			if selection.isdigit():
+				selection = int(selection)
 				if selection == 1:
 					self.goto()
 				elif selection == 2:
 					self.rehearse()
 				elif selection == 3:
 					self.show()
+				else: continue
 
 potentialDevices = glob.glob('/dev/midi*')
 if not len(potentialDevices):
@@ -125,11 +145,6 @@ if len(potentialDevices) > 1:
 		if selected > 0 and selected <= len(potentialDevices):
 			validInput = True
 	device = potentialDevices(selected - 1)
-if len(sys.argv) < 2:
-	print 'Usage: python %s <CommandFile>' % sys.argv[0]
-	sys.exit(1)
-if not os.path.isfile(sys.argv[1]):
-	print 'Input file does not exist'
-	sys.exit(1)
 show = Show(sys.argv[1], device)
 show.loop()
+'Exiting...'
