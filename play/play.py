@@ -1,18 +1,18 @@
 import sys
 from time import sleep, time
+import rtmidi_python as rtmidi
 import binascii
 import glob
 import os.path
 delimiter = '***************************************************'
 if len(sys.argv) < 2:
-	print 'Usage: python %s <CommandFile> [--noMusic]' % sys.argv[0]
+	print 'Usage: python %s <CommandFile>' % sys.argv[0]
 	sys.exit(1)
 if not os.path.isfile(sys.argv[1]):
 	print 'Input file does not exist'
 	sys.exit(1)
 def send(device, message):
-	device.write(message)
-	device.flush()
+	device.send_message(message)
 class Cue:
 	def __init__(self, tm, msg, cn):
 		self.time = float(tm)
@@ -21,7 +21,7 @@ class Cue:
 	def go(self, device, startTime):
 		send(device, self.message)
 		goTime = (time() * 1000 - startTime)
-		print 'cue %s at %is' % (self.description, goTime / 1000)
+		print 'cue %s at %.3fs' % (self.description, goTime / 1000)
 class Song:
 	def __init__(self, ttl, cs, ind):
 		self.title = ttl
@@ -55,7 +55,6 @@ class Show:
 			print '(%i) %s' % (ind + 1, song.title)
 		print delimiter + '\n'
 	def __init__(self, filename, device):
-		self.midiOut = open(device, 'w')
 		self.title = filename.split('.')[0]
 		currentCues = []
 		songTitle = ''
@@ -88,7 +87,7 @@ class Show:
 		cueCode = binascii.hexlify(str(cue))
 		output = 'F07F01020101' + cueCode + '0031F7'
 		message = bytearray.fromhex(output)
-		send(self.midiOut, message)
+		send(device, message)
 	def rehearse(self):
 		while True:
 			self.printSongs()
@@ -97,7 +96,7 @@ class Show:
 			if not(selection.isdigit() and int(selection) > 0 and int(selection) <= len(self.songs)):
 				print 'Exiting rehearsal...'
 				return 0
-			self.songs[int(selection) - 1].play(self.midiOut)
+			self.songs[int(selection) - 1].play(device)
 	def show(self):
 		startI = 0
 		self.printSongs()
@@ -106,7 +105,7 @@ class Show:
 		if selection.isdigit() and int(selection) > 0 and int(selection) <= len(self.songs):
 			startI = int(selection) - 1
 		for song in self.songs[startI:]:
-			song.play(self.midiOut)
+			song.play(device)
 	def loop(self):
 		while True:
 			print 'Please choose an option from below:\n'
@@ -124,27 +123,9 @@ class Show:
 					self.show()
 				else: continue
 
-potentialDevices = glob.glob('/dev/midi*')
-if not len(potentialDevices):
-	print 'No MIDI devices have been detected'
-	sys.exit(1)
-device = ''
-if len(potentialDevices) == 1:
-	device = potentialDevices[0]
-if len(potentialDevices) > 1:
-	print 'Multiple MIDI devices have been detected, please select your desired device'
-	for idx, dev in enumerate(potentialDevices):
-		print '(%i) %s' % (idx + 1, dev)
-	selected = 0
-	validInput = False
-	while not validInput:
-		try:
-			selected = int(input('> '))
-		except TypeError:
-			continue
-		if selected > 0 and selected <= len(potentialDevices):
-			validInput = True
-	device = potentialDevices(selected - 1)
+device = rtmidi.MidiOut()
+device.open_port(0)
+
 show = Show(sys.argv[1], device)
 show.loop()
 'Exiting...'
