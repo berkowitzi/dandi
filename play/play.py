@@ -39,7 +39,7 @@ class Song:
 					continue
 				cue.go(device, startTime)
 		except:
-			print 'Disconcinuing cue playback for %s...' % self.title
+			print 'Discontinuing cue playback for %s...' % self.title
 			print delimiter
 			return
 		print 'Done with cues for %s!' % self.title
